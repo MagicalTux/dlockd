@@ -4,6 +4,28 @@
 #include "DLockManager.hpp"
 #include "DLockLocal.hpp"
 
+static DLockManager *dlm;
+
+void sighandler(int signum) {
+	static bool exiting = false;
+
+	switch(signum) {
+		case SIGINT:
+		case SIGTERM:
+			if (exiting) {
+				qDebug("emergency exit");
+				exit(1);
+			}
+			exiting = true;
+			QMetaObject::invokeMethod(dlm, "terminate", Qt::QueuedConnection);
+			break;
+		case SIGHUP:
+			QMetaObject::invokeMethod(dlm, "reload", Qt::QueuedConnection);
+			break;
+	}
+	
+}
+
 int main(int argc, char *argv[]) {
 	QCoreApplication app(argc, argv);
 	QStringList args = QCoreApplication::arguments();
@@ -30,7 +52,12 @@ int main(int argc, char *argv[]) {
 	}
 
 	DLockManager m(remote_port);
+	dlm = &m;
 	DLockLocal l(m, QHostAddress::LocalHost, local_port);
+
+	signal(SIGINT, sighandler);
+	signal(SIGTERM, sighandler);
+	signal(SIGHUP, sighandler);
 
 	return app.exec();
 }
